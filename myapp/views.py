@@ -77,7 +77,7 @@ class SearchView(APIView):
             
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except Exception as e:
-                return Response({"detail": str()}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             
         users = User.objects.filter(Q(name__icontains=name))
         serializer = SearchSerializer(users, many=True)
