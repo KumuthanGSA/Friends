@@ -4,16 +4,19 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+# from django_ratelimit.decorators import ratelimit
 from django.db.models import Q
 # local imports
-from .serializers import AdminRegisterSerializer, SearchSerializer
-from .models import User
+from .serializers import AdminRegisterSerializer, SearchSerializer, FriendRequestSerializer, UserSerializer
+from .models import User, FriendRequest
 # Create your views here.
 
 
 class AdminRegisterView(APIView):
     def post(self, request):
         serializer = AdminRegisterSerializer(data=request.data)
+
+        # Validates and save the serializer
         if serializer.is_valid():
             user = serializer.save()
             return Response({'detail': "Admin user created successfully"}, status=status.HTTP_201_CREATED)
@@ -70,24 +73,73 @@ class SearchView(APIView):
     def post(self, request):
         email = request.data.get("email")
         name =  request.data.get("name")
+
+        # If email given as Input
         if email:
             try:
                 user = User.objects.get(email=email)
                 serializer = SearchSerializer(user)
             
                 return Response(serializer.data, status=status.HTTP_200_OK)
-            except Exception as e:
+            
+            except User.DoesNotExist as e:
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             
+        # If Username given as Input   
         users = User.objects.filter(Q(name__icontains=name))
         serializer = SearchSerializer(users, many=True)
+
+        # Paginating the fetched User instances
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(users, request)
         if page is not None:
             serializer = SearchSerializer(users, many=True)
             return paginator.get_paginated_response(serializer.data)
+        
         return Response(paginator.get_paginated_response(serializer.data))
-            
+    
+
+class FriendRequestViewSet(APIView):
+    permission_classes = [IsAuthenticated]
+
+    # Users can not send more than 3 friend requests within a minute.
+    # @ratelimit(key='user', rate='3/m', method='POST', block=True)
+    def post(self, request):
+        to_user_id = request.data.get('to_user_id')
+        to_user = User.objects.get(id=to_user_id)
+
+        # Create a friend request
+        friend_request, created = FriendRequest.objects.get_or_create(from_user=request.user, to_user=to_user)
+        if not created:
+            return Response({"detail": "Friend request already sent"}, status=status.HTTP_400_BAD_REQUEST)
         
-            
+        return Response({"detail": "Friend request send successfully!!"}, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        friend_request = FriendRequest.objects.get(id=pk)
+
+        # Change the request status to accept or reject
+        if request.data.get('status') in ['accepted', 'rejected']:
+            friend_request.status = request.data.get('status')
+            friend_request.save()
+            return Response({"detail": f"Friend request {request.data.get('status')} successfully!!"}, status = status.HTTP_200_OK)
         
+        return Response({"detail": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get(self, request):
+        # Fetch the pending FriendRequest instances
+        received_requests = FriendRequest.objects.filter(to_user=request.user, status='pending')
+        serializer = FriendRequestSerializer(received_requests, many=True)
+
+        return Response({"data": serializer.data}, status = status.HTTP_200_OK)
+          
+
+class FriendsListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    # Fetch users who have accepted friend request 
+    def get(self, request):
+        friends_list = User.objects.filter(sent_requests__to_user=self.request.user, sent_requests__status='accepted')
+        
+        serializer =  UserSerializer(friends_list, many=True)
+        return Response({"data": serializer.data}, status = status.HTTP_200_OK)

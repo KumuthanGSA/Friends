@@ -1,6 +1,6 @@
 from rest_framework import serializers
 #local imports
-from .models import User
+from .models import User, FriendRequest
 
 
 class AdminRegisterSerializer(serializers.ModelSerializer):
@@ -25,3 +25,17 @@ class SearchSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'name']
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'email']
+
+class FriendRequestSerializer(serializers.ModelSerializer):
+    from_user = UserSerializer(read_only=True)
+    to_user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = FriendRequest
+        fields = ['id', 'from_user', 'to_user', 'status', 'created_at']
+
