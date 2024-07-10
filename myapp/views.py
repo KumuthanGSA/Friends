@@ -1,11 +1,12 @@
+from django.db.models import Q
+from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-# from django_ratelimit.decorators import ratelimit
-from django.db.models import Q
+from django_ratelimit.decorators import ratelimit
 # local imports
 from .serializers import AdminRegisterSerializer, SearchSerializer, FriendRequestSerializer, UserSerializer
 from .models import User, FriendRequest
@@ -103,7 +104,7 @@ class FriendRequestViewSet(APIView):
     permission_classes = [IsAuthenticated]
 
     # Users can not send more than 3 friend requests within a minute.
-    # @ratelimit(key='user', rate='3/m', method='POST', block=True)
+    @method_decorator(ratelimit(key='user', rate='3/m', method='POST', block=True))
     def post(self, request):
         to_user_id = request.data.get('to_user_id')
         to_user = User.objects.get(id=to_user_id)
